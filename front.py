@@ -3,7 +3,6 @@ import main as m
 import database as db
 import pandas as pd
 import sqlite3 as sql
-import plotly.graph_objects as go
 
 # estabelecendo uma conexão com o bando de dados
 con = sql.connect("dados.db")
@@ -108,29 +107,6 @@ st.subheader("📊 Desempenho do Negócio:")
 st.caption("Analise as tendências por período.")
 opcao = st.selectbox("Selecione o período de análise", ("Todos os registros", "Última semana", "Últimos 15 dias","Último mês", "Últimos 2 meses", "Últimos 3 meses", "Últimos 4 meses"))
 
-# dados para o gráfico de pizza
-dadosElasticidade = dadosSQL["elasticidade"]
-categorias = {
-    'Alta Sensibilidade': 0, 
-    'Baixa Sensibilidade': 0, 
-    'Sensibilidade Média': 0, 
-    'Outros': 0
-}
-for dados in dadosElasticidade:
-    if dados == 1:
-        categorias['Sensibilidade Média'] += 1
-    elif dados > 1:
-        categorias['Alta Sensibilidade'] += 1
-    elif dados < 1:
-        categorias['Baixa Sensibilidade'] += 1
-    else:
-        categorias['Outros'] += 1
-
-labels = list(categorias.keys())
-values = list(categorias.values())
-fig = go.Figure(data=[go.Pie(labels=labels, values=values, hole=0.3)])
-fig.update_layout(title="Perfil de Sensibilidade dos Clientes")
-
 
 if opcao == "Todos os registros":
     dados_filtrados = dadosSQL
@@ -159,8 +135,11 @@ with colg2:
 colg3, colg4 = st.columns(2)	
 with colg3:
     st.write("Perfil de Sensibilidade dos Clientes:")
-    # Exibindo no Streamlit
-    st.plotly_chart(fig, use_container_width=True)
+    # Criando um histograma simples da elasticidade
+    hist_data = pd.DataFrame({
+        'Elasticidade': dados_filtrados['elasticidade'].dropna()
+    })
+    st.bar_chart(hist_data)
 
 with colg4:
     st.write("Evolução dos Preços:")
