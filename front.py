@@ -4,6 +4,7 @@ import os
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 import numpy as np
+import plotly.express as px
 
 # Import improved modules
 import main as m
@@ -140,8 +141,8 @@ with col6:
              delta=f"{vendas_por_dia - producao_diaria} unidades/dia")
 
 # Register data button
-col_btn1, col_btn2 = st.columns([3, 1])
-with col_btn2:
+col_btn1, col_btn2 = st.columns([1, 3])
+with col_btn1:
     inserir_dados = st.button("📝 Registrar Dados", use_container_width=True)
     
     if inserir_dados:
@@ -167,8 +168,8 @@ st.markdown('<h2 class="section-header">📈 Análise de Elasticidade</h2>', uns
 # Get latest data from the database
 latest_data = db.get_latest_data()
 
-col_analise1, col_analise2 = st.columns([2, 1])
-with col_analise2:
+col_analise1, col_analise2 = st.columns([1, 3])
+with col_analise1:
     calcular_elasticidade = st.button("🔍 Analisar Impacto", use_container_width=True)
 
 if calcular_elasticidade and latest_data:
@@ -268,6 +269,11 @@ if not dados_filtrados.empty:
     for col in numeric_cols:
         dados_filtrados[col] = pd.to_numeric(dados_filtrados[col], errors='coerce')
 
+    # Calculate profit values for charts
+    dados_filtrados['lucro_unitario'] = dados_filtrados['precoFinal'] - dados_filtrados['precoInicio']
+    dados_filtrados['lucro_total'] = dados_filtrados['lucro_unitario'] * dados_filtrados['quantidadeFinal']
+    dados_filtrados['margem_percentual'] = (dados_filtrados['lucro_unitario'] / dados_filtrados['precoFinal']) * 100
+
     # Create tabs for different visualizations
     tab1, tab2, tab3 = st.tabs(["Análise de Preços e Vendas", "Elasticidade e Tendências", "Projeções"])
 
@@ -348,190 +354,12 @@ if not dados_filtrados.empty:
             
             plt.tight_layout()
             st.pyplot(fig)
-            
-    with tab3:
-        # Predictions and projections tab
-        st.markdown('<p class="chart-title">Projeções de Vendas com Base na Elasticidade</p>', unsafe_allow_html=True)
-        
-        # Create input fields for simulation
-        col_sim1, col_sim2, col_sim3 = st.columns(3)
-        
-        with col_sim1:
-            # Get current price from latest data if available
-            current_price = preco_final
-            if latest_data:
-                _, current_price, _, current_quantity, _ = latest_data
-                current_quantity = current_quantity / 30  # Convert monthly to daily
-            else:
-                current_quantity = vendas_por_dia
-            
-            # Input for new price
-            novo_preco = st.number_input("Simular novo preço: R$", 
-                                        min_value=0.01, value=float(current_price), step=0.50, format="%.2f")
-            st.caption(f"Preço atual: R$ {current_price:.2f}")
-            
-        with col_sim2:
-            # Get latest elasticity
-            elasticidade_atual = None
-            if latest_data and latest_data[4] is not None:
-                elasticidade_atual = latest_data[4]
-            
-            # Input for elasticity override
-            usar_elasticidade = st.number_input("Elasticidade para simulação:", 
-                                              min_value=-5.0, max_value=5.0, 
-                                              value=float(elasticidade_atual if elasticidade_atual is not None else -0.8), 
-                                              step=0.1, format="%.2f")
-            
-            st.caption("Use a elasticidade calculada ou ajuste manualmente")
-            
-        with col_sim3:
-            # Button to run simulation
-            st.write("")  # Spacer
-            st.write("")  # Spacer
-            simular = st.button("🧮 Simular Cenário", use_container_width=True)
-            
-        # Run projection if button is clicked
-        if simular:
-            # Calculate projected sales
-            variacao_preco = (novo_preco - current_price) / current_price
-            variacao_quantidade = variacao_preco * usar_elasticidade
-            nova_quantidade = current_quantity * (1 + variacao_quantidade)
-            
-            # Display projection results
-            col_res1, col_res2 = st.columns(2)
-            
-            with col_res1:
-                # Create comparison chart
-                fig, ax = plt.subplots(figsize=(10, 6))
-                
-                # Set bar positions
-                bar_width = 0.35
-                index = np.arange(2)
-                
-                # Calculate revenue
-                receita_atual = current_price * current_quantity * 30  # Monthly revenue
-                receita_nova = novo_preco * nova_quantidade * 30  # Monthly revenue
-                
-                # Create bars for quantity
-                bars1 = ax.bar(index - bar_width/2, [current_quantity, nova_quantidade], 
-                              bar_width, label='Vendas diárias', color='#3498db')
-                
-                # Create second y-axis for revenue
-                ax2 = ax.twinx()
-                bars2 = ax2.bar(index + bar_width/2, [receita_atual, receita_nova], 
-                               bar_width, label='Receita mensal', color='#e74c3c')
-                
-                # Add data labels
-                for bar in bars1:
-                    height = bar.get_height()
-                    ax.text(bar.get_x() + bar.get_width()/2., height + 5,
-                           f'{height:.0f}', ha='center', va='bottom')
-                
-                for bar in bars2:
-                    height = bar.get_height()
-                    ax2.text(bar.get_x() + bar.get_width()/2., height + 100,
-                            f'R$ {height:.0f}', ha='center', va='bottom')
-                
-                # Format chart
-                ax.set_xticks(index)
-                ax.set_xticklabels(['Cenário Atual', 'Cenário Projetado'])
-                ax.set_ylabel('Vendas (unidades/dia)')
-                ax2.set_ylabel('Receita (R$/mês)')
-                
-                # Combine legends
-                lines1, labels1 = ax.get_legend_handles_labels()
-                lines2, labels2 = ax2.get_legend_handles_labels()
-                ax.legend(lines1 + lines2, labels1 + labels2, loc='upper left')
-                
-                plt.tight_layout()
-                st.pyplot(fig)
-                
-            with col_res2:
-                # Display impact metrics
-                variacao_percentual_vendas = variacao_quantidade * 100
-                variacao_percentual_receita = ((receita_nova - receita_atual) / receita_atual) * 100
-                
-                st.markdown("### Impacto Projetado")
-                
-                # Create metrics cards
-                if variacao_percentual_vendas >= 0:
-                    st.success(f"📈 Vendas: +{variacao_percentual_vendas:.1f}% ({nova_quantidade:.0f} unidades/dia)")
-                else:
-                    st.warning(f"📉 Vendas: {variacao_percentual_vendas:.1f}% ({nova_quantidade:.0f} unidades/dia)")
-                    
-                if variacao_percentual_receita >= 0:
-                    st.success(f"💰 Receita: +{variacao_percentual_receita:.1f}% (R$ {receita_nova:.2f}/mês)")
-                else:
-                    st.warning(f"💰 Receita: {variacao_percentual_receita:.1f}% (R$ {receita_nova:.2f}/mês)")
-                
-                # Calculate profit metrics
-                custo_unitario = preco_unidade
-                lucro_atual = (current_price - custo_unitario) * current_quantity * 30
-                lucro_novo = (novo_preco - custo_unitario) * nova_quantidade * 30
-                variacao_percentual_lucro = ((lucro_novo - lucro_atual) / lucro_atual) * 100
-                
-                if variacao_percentual_lucro >= 0:
-                    st.success(f"✅ Lucro: +{variacao_percentual_lucro:.1f}% (R$ {lucro_novo:.2f}/mês)")
-                else:
-                    st.warning(f"⚠️ Lucro: {variacao_percentual_lucro:.1f}% (R$ {lucro_novo:.2f}/mês)")
-                
-                # Provide recommendation
-                st.markdown("### Recomendação")
-                if variacao_percentual_lucro > 5:
-                    st.markdown(f'<div class="insight-box success">✅ <b>Recomendado:</b> A alteração para R$ {novo_preco:.2f} deve gerar um aumento significativo no lucro. Considere implementar esta mudança.</div>', unsafe_allow_html=True)
-                elif variacao_percentual_lucro > 0:
-                    st.markdown(f'<div class="insight-box info">ℹ️ <b>Considere testar:</b> A alteração para R$ {novo_preco:.2f} deve gerar um pequeno aumento no lucro. Recomenda-se testar em parte do negócio primeiro.</div>', unsafe_allow_html=True)
-                else:
-                    st.markdown(f'<div class="insight-box warning">⚠️ <b>Não recomendado:</b> A alteração para R$ {novo_preco:.2f} deve reduzir o lucro total. Mantenha o preço atual ou considere outras opções.</div>', unsafe_allow_html=True)
-
-        # If no data available, display a message
-        else:
-            st.warning("Nenhum dado disponível para análise. Registre os dados primeiro.")
-            
-            # Display sample charts with dummy data
-            st.markdown("### Visualização com dados de exemplo")
-            
-            # Create sample data
-            dates = pd.date_range(start='2024-01-01', periods=10, freq='W')
-            sample_data = pd.DataFrame({
-                'data_formatada': dates.strftime('%d/%m/%Y'),
-                'precoInicio': np.linspace(2.5, 3.0, 10),
-                'precoFinal': np.linspace(5.0, 6.5, 10),
-                'quantidadeInicio': np.ones(10) * 100,
-                'quantidadeFinal': np.linspace(90, 110, 10),
-                'elasticidade': np.linspace(-1.5, -0.5, 10)
-            })
-            
-            # Display sample chart
-            fig, ax = plt.subplots(figsize=(10, 5))
-            ax.plot(sample_data['data_formatada'], sample_data['elasticidade'], 'o--', color='#9b59b6')
-            ax.set_title('Exemplo: Tendência de Elasticidade')
-            ax.set_xlabel('Data')
-            ax.set_ylabel('Elasticidade')
-            plt.xticks(rotation=45)
-            plt.tight_layout()
-            st.pyplot(fig)
-            
-            st.info("Os gráficos acima são apenas exemplos. Registre dados reais para obter análises personalizadas.")
-
-        # Add footer with information
-        st.markdown("<hr>", unsafe_allow_html=True)
-        st.markdown("""
-        <div style="text-align: center; color: #666;">
-            <small>Lanchonete do Amaro - Sistema de Análise de Preços © 2025</small><br>
-            <small>Desenvolvido com ❤️ usando Streamlit e Pandas</small>
-        </div>
-        """, unsafe_allow_html=True)
         
         # Second row of charts
         col_chart3, col_chart4 = st.columns(2)
         
         with col_chart3:
             st.markdown('<p class="chart-title">Lucro Projetado por Período (R$)</p>', unsafe_allow_html=True)
-            
-            # Calculate profit
-            dados_filtrados['lucro_unitario'] = dados_filtrados['precoFinal'] - dados_filtrados['precoInicio']
-            dados_filtrados['lucro_total'] = dados_filtrados['lucro_unitario'] * dados_filtrados['quantidadeFinal']
             
             # Create bar chart for profit
             fig, ax = plt.subplots(figsize=(10, 5))
@@ -554,9 +382,6 @@ if not dados_filtrados.empty:
             
         with col_chart4:
             st.markdown('<p class="chart-title">Comparativo de Preço e Margem (%)</p>', unsafe_allow_html=True)
-            
-            # Calculate profit margin percentage
-            dados_filtrados['margem_percentual'] = (dados_filtrados['lucro_unitario'] / dados_filtrados['precoFinal']) * 100
             
             # Create chart
             fig, ax = plt.subplots(figsize=(10, 5))
@@ -753,18 +578,190 @@ if not dados_filtrados.empty:
             
             plt.tight_layout()
             st.pyplot(fig)
-        # First row of elasticity charts
-        col_elast1, col_elast2 = st.columns(2)
+
+    with tab3:
+        # Predictions and projections tab
+        st.markdown('<p class="chart-title">Projeções de Vendas com Base na Elasticidade</p>', unsafe_allow_html=True)
         
-        with col_elast1:
-            st.markdown('<p class="chart-title">Tendência de Elasticidade ao Longo do Tempo</p>', unsafe_allow_html=True)
+        # Create input fields for simulation
+        col_sim1, col_sim2, col_sim3 = st.columns(3)
+        
+        with col_sim1:
+            # Get current price from latest data if available
+            current_price = preco_final
+            if latest_data:
+                _, current_price, _, current_quantity, _ = latest_data
+                current_quantity = current_quantity / 30  # Convert monthly to daily
+            else:
+                current_quantity = vendas_por_dia
             
-            # Create elasticity trend chart
-            fig, ax = plt.subplots(figsize=(10, 5))
+            # Input for new price
+            novo_preco = st.number_input("Simular novo preço: R$", 
+                                        min_value=0.01, value=float(current_price), step=0.50, format="%.2f")
+            st.caption(f"Preço atual: R$ {current_price:.2f}")
             
-            # Plot elasticity line
-            ax.plot(dados_filtrados['data_formatada'], dados_filtrados['elasticidade'], 'o-', 
-                   color='#9b59b6', linewidth=2)
+        with col_sim2:
+            # Get latest elasticity
+            elasticidade_atual = None
+            if latest_data and latest_data[4] is not None:
+                elasticidade_atual = latest_data[4]
             
-            # Add reference lines
-            ax.axhline(y=-1, color='#95a5a')
+            # Input for elasticity override
+            usar_elasticidade = st.number_input("Elasticidade para simulação:", 
+                                              min_value=-5.0, max_value=5.0, 
+                                              value=float(elasticidade_atual if elasticidade_atual is not None else -0.8), 
+                                              step=0.1, format="%.2f")
+            
+            st.caption("Use a elasticidade calculada ou ajuste manualmente")
+            
+        with col_sim3:
+            # Button to run simulation
+            st.write("")  # Spacer
+            st.write("")  # Spacer
+            simular = st.button("🧮 Simular Cenário", use_container_width=True)
+            
+        # Run projection if button is clicked
+        if simular:
+            # Calculate projected sales
+            variacao_preco = (novo_preco - current_price) / current_price
+            variacao_quantidade = variacao_preco * usar_elasticidade
+            nova_quantidade = current_quantity * (1 + variacao_quantidade)
+            
+            # Display projection results
+            col_res1, col_res2 = st.columns(2)
+            
+            with col_res1:
+                # Create comparison chart
+                fig, ax = plt.subplots(figsize=(10, 6))
+                
+                # Set bar positions
+                bar_width = 0.35
+                index = np.arange(2)
+                
+                # Calculate revenue
+                receita_atual = current_price * current_quantity * 30  # Monthly revenue
+                receita_nova = novo_preco * nova_quantidade * 30  # Monthly revenue
+                
+                # Create bars for quantity
+                bars1 = ax.bar(index - bar_width/2, [current_quantity, nova_quantidade], 
+                              bar_width, label='Vendas diárias', color='#3498db')
+                
+                # Create second y-axis for revenue
+                ax2 = ax.twinx()
+                bars2 = ax2.bar(index + bar_width/2, [receita_atual, receita_nova], 
+                               bar_width, label='Receita mensal', color='#e74c3c')
+                
+                # Add data labels
+                for bar in bars1:
+                    height = bar.get_height()
+                    ax.text(bar.get_x() + bar.get_width()/2., height + 5,
+                           f'{height:.0f}', ha='center', va='bottom')
+                
+                for bar in bars2:
+                    height = bar.get_height()
+                    ax2.text(bar.get_x() + bar.get_width()/2., height + 100,
+                            f'R$ {height:.0f}', ha='center', va='bottom')
+                
+                # Format chart
+                ax.set_xticks(index)
+                ax.set_xticklabels(['Cenário Atual', 'Cenário Projetado'])
+                ax.set_ylabel('Vendas (unidades/dia)')
+                ax2.set_ylabel('Receita (R$/mês)')
+                
+                # Combine legends
+                lines1, labels1 = ax.get_legend_handles_labels()
+                lines2, labels2 = ax2.get_legend_handles_labels()
+                ax.legend(lines1 + lines2, labels1 + labels2, loc='upper left')
+                
+                plt.tight_layout()
+                st.pyplot(fig)
+                
+            with col_res2:
+                # Display impact metrics
+                variacao_percentual_vendas = variacao_quantidade * 100
+                variacao_percentual_receita = ((receita_nova - receita_atual) / receita_atual) * 100
+                
+                st.markdown("### Impacto Projetado")
+                
+                # Create metrics cards
+                if variacao_percentual_vendas >= 0:
+                    st.success(f"📈 Vendas: +{variacao_percentual_vendas:.1f}% ({nova_quantidade:.0f} unidades/dia)")
+                else:
+                    st.warning(f"📉 Vendas: {variacao_percentual_vendas:.1f}% ({nova_quantidade:.0f} unidades/dia)")
+                    
+                if variacao_percentual_receita >= 0:
+                    st.success(f"💰 Receita: +{variacao_percentual_receita:.1f}% (R$ {receita_nova:.2f}/mês)")
+                else:
+                    st.warning(f"💰 Receita: {variacao_percentual_receita:.1f}% (R$ {receita_nova:.2f}/mês)")
+                
+                # Calculate profit metrics
+                custo_unitario = preco_unidade
+                lucro_atual = (current_price - custo_unitario) * current_quantity * 30
+                lucro_novo = (novo_preco - custo_unitario) * nova_quantidade * 30
+                variacao_percentual_lucro = ((lucro_novo - lucro_atual) / lucro_atual) * 100
+                
+                if variacao_percentual_lucro >= 0:
+                    st.success(f"✅ Lucro: +{variacao_percentual_lucro:.1f}% (R$ {lucro_novo:.2f}/mês)")
+                else:
+                    st.warning(f"⚠️ Lucro: {variacao_percentual_lucro:.1f}% (R$ {lucro_novo:.2f}/mês)")
+                
+                # Provide recommendation
+                st.markdown("### Recomendação")
+                if variacao_percentual_lucro > 5:
+                    st.markdown(f'<div class="insight-box success">✅ <b>Recomendado:</b> A alteração para R$ {novo_preco:.2f} deve gerar um aumento significativo no lucro. Considere implementar esta mudança.</div>', unsafe_allow_html=True)
+                elif variacao_percentual_lucro > 0:
+                    st.markdown(f'<div class="insight-box info">ℹ️ <b>Considere testar:</b> A alteração para R$ {novo_preco:.2f} deve gerar um pequeno aumento no lucro. Recomenda-se testar em parte do negócio primeiro.</div>', unsafe_allow_html=True)
+                else:
+                    st.markdown(f'<div class="insight-box warning">⚠️ <b>Não recomendado:</b> A alteração para R$ {novo_preco:.2f} deve reduzir o lucro total. Mantenha o preço atual ou considere outras opções.</div>', unsafe_allow_html=True)
+        else:
+            st.info("Clique em 'Simular Cenário' para ver a projeção de impacto da alteração de preço.")
+else:
+    # If no data available, display a message
+    st.warning("Nenhum dado disponível para análise. Registre os dados primeiro.")
+    
+    # Display sample charts with dummy data
+    st.markdown("### Visualização com dados de exemplo")
+    
+    # Create sample data
+    dates = pd.date_range(start='2024-01-01', periods=10, freq='W')
+    sample_data = pd.DataFrame({
+        'data_formatada': dates.strftime('%d/%m/%Y'),
+        'precoInicio': np.linspace(2.5, 3.0, 10),
+        'precoFinal': np.linspace(5.0, 6.5, 10),
+        'quantidadeInicio': np.ones(10) * 100,
+        'quantidadeFinal': np.linspace(90, 110, 10),
+        'elasticidade': np.linspace(-1.5, -0.5, 10)
+    })
+    
+    # Display sample chart
+    fig = px.line(
+        sample_data,
+        x='data_formatada',
+        y='elasticidade',
+        markers=True,
+        title='Exemplo: Tendência de Elasticidade',
+        labels={'data_formatada': 'Data', 'elasticidade': 'Elasticidade'},
+        template='plotly_white'
+    )
+
+    # Ajustar layout do gráfico
+    fig.update_layout(  
+        title={'x': 0.5},  # Centralizar o título
+        xaxis=dict(tickangle=45),  # Rotacionar os rótulos do eixo X
+        yaxis=dict(title='Elasticidade'),
+        margin=dict(l=20, r=20, t=40, b=20)  # Ajustar margens
+    )
+
+    # Exibir o gráfico no Streamlit
+    st.plotly_chart(fig, use_container_width=True)  
+    
+    st.info("Os gráficos acima são apenas exemplos. Registre dados reais para obter análises personalizadas.")
+
+# Add footer with information
+st.markdown("<hr>", unsafe_allow_html=True)
+st.markdown("""
+<div style="text-align: center; color: #666;">
+    <small>Lanchonete do Amaro - Sistema de Análise de Preços © 2025</small><br>
+    <small>Desenvolvido com ❤️ usando Streamlit e Pandas</small>
+</div>
+""", unsafe_allow_html=True)
